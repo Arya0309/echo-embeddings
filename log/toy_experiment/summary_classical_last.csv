@@ -1,0 +1,4 @@
+mode,pool,model,subset,accuracy,n
+classical,last,mistralai/Mistral-7B-Instruct-v0.1,ALL,0.7059,17
+classical,last,mistralai/Mistral-7B-Instruct-v0.1,S1,0.3333,6
+classical,last,mistralai/Mistral-7B-Instruct-v0.1,S2,0.9091,11

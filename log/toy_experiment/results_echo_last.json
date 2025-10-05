@@ -1,0 +1,155 @@
+[
+  {
+    "q": "She loves to travel in summer, especially to cold destinations, avoiding hot and crowded places",
+    "s_pos": "In summer, she adores traveling, specifically to chilly locations, steering clear of warm, populous areas",
+    "s_neg": "She loves to travel in summer, but prefers to visit hot and bustling tourist spots",
+    "struct": "S2",
+    "sim_pos": "0.9865",
+    "sim_neg": "0.9747",
+    "correct": true
+  },
+  {
+    "q": "The cat often sits by the window, dreaming of chasing birds and enjoying the warm sunshine",
+    "s_pos": "Frequently, the cat lounges near the window, imagining bird pursuits and basking in the sunlight",
+    "s_neg": "The cat often sits by the window, but is too lazy to dream of chasing anything",
+    "struct": "S2",
+    "sim_pos": "0.9835",
+    "sim_neg": "0.9718",
+    "correct": true
+  },
+  {
+    "q": "He reads books every night, finding solace in fiction and escaping from the stresses of daily life",
+    "s_pos": "Nightly, he immerses himself in books, seeking comfort in stories and evading everyday tensions",
+    "s_neg": "He reads books every night, yet he feels that non-fiction is more engaging and informative",
+    "struct": "S2",
+    "sim_pos": "0.9867",
+    "sim_neg": "0.9579",
+    "correct": true
+  },
+  {
+    "q": "They play music loudly in the evening, filling their home with energetic beats and vibrant melodies",
+    "s_pos": "In the evenings, they blast tunes, their house resonating with lively rhythms and bright harmonies",
+    "s_neg": "They play music loudly in the evening, but only soothing classical tunes to relax",
+    "struct": "S2",
+    "sim_pos": "0.9903",
+    "sim_neg": "0.9566",
+    "correct": true
+  },
+  {
+    "q": "She paints landscapes on weekends, expressing her creativity through vibrant colors and abstract forms",
+    "s_pos": "On weekends, she engages in landscape painting, showcasing her artistic flair with lively hues and unconventional shapes",
+    "s_neg": "She paints landscapes on weekends, preferring realistic and detailed depictions of nature",
+    "struct": "S2",
+    "sim_pos": "0.9895",
+    "sim_neg": "0.9808",
+    "correct": true
+  },
+  {
+    "q": "The children eagerly await winter, dreaming of snowball fights and building snowmen",
+    "s_pos": "During winter, the kids are excited, imagining snow battles and constructing snow figures",
+    "s_neg": "The children eagerly await winter, yet they dislike the cold and prefer staying indoors",
+    "struct": "S2",
+    "sim_pos": "0.9850",
+    "sim_neg": "0.9675",
+    "correct": true
+  },
+  {
+    "q": "He often jokes at parties, becoming the center of attention with his witty humor",
+    "s_pos": "At social gatherings, he frequently makes jokes, captivating the crowd with his clever wit",
+    "s_neg": "He often jokes at parties, but tends to alienate others with his sarcasm",
+    "struct": "S2",
+    "sim_pos": "0.9799",
+    "sim_neg": "0.9839",
+    "correct": false
+  },
+  {
+    "q": "She collects antique vases, adoring their unique designs and historical significance",
+    "s_pos": "Her hobby is gathering old vases, cherishing their distinct patterns and the stories they hold",
+    "s_neg": "She collects antique vases, but is indifferent to their history and focuses on their resale value",
+    "struct": "S2",
+    "sim_pos": "0.9822",
+    "sim_neg": "0.9669",
+    "correct": true
+  },
+  {
+    "q": "The band plays rock music loudly, thrilling audiences with energetic performances and powerful lyrics",
+    "s_pos": "Performing rock loudly, the band excites crowds with dynamic shows and impactful words",
+    "s_neg": "The band plays rock music loudly, but often receives complaints for being too noisy",
+    "struct": "S2",
+    "sim_pos": "0.9835",
+    "sim_neg": "0.9576",
+    "correct": true
+  },
+  {
+    "q": "He prefers working at night, enjoying the quiet and focusing better without distractions",
+    "s_pos": "Nighttime is his preferred work period, appreciating the tranquility and concentrated environment",
+    "s_neg": "He prefers working at night, despite feeling more tired and less productive",
+    "struct": "S2",
+    "sim_pos": "0.9836",
+    "sim_neg": "0.9681",
+    "correct": true
+  },
+  {
+    "q": "She writes poetry in her free time, pouring her emotions and experiences into each verse",
+    "s_pos": "During her leisure, she crafts poems, infusing her feelings and life stories into every line",
+    "s_neg": "She writes poetry in her free time, but struggles to find inspiration and motivation",
+    "struct": "S2",
+    "sim_pos": "0.9877",
+    "sim_neg": "0.9721",
+    "correct": true
+  },
+  {
+    "q": "On sunny days, I often find myself longing for the cool breeze of the ocean and the sound of waves crashing, as I enjoy outdoor activities",
+    "s_pos": "When the sun is shining, I tend to crave the refreshing sea air and the rhythmic sound of the ocean, since I relish spending time outdoors",
+    "s_neg": "During rainy days, I usually prefer the warmth and quiet of my home, as I enjoy outdoor activities",
+    "struct": "S1",
+    "sim_pos": "0.9732",
+    "sim_neg": "0.9754",
+    "correct": false
+  },
+  {
+    "q": "As a lover of classical music, I spend hours listening to Beethoven and Bach, reveling in the complexity of their compositions, though I’m fond of playing the guitar",
+    "s_pos": "Being an enthusiast of classical melodies, I often indulge in lengthy sessions of Beethoven and Bach, appreciating the intricacies of their work, as I delight in guitar playing",
+    "s_neg": "Despite my preference for rock music, I rarely spend time on music other than playing my favorite tunes on the guitar, though I’m fond of playing the guitar",
+    "struct": "S1",
+    "sim_pos": "0.9691",
+    "sim_neg": "0.9583",
+    "correct": true
+  },
+  {
+    "q": "In the world of literature, I have an insatiable appetite for mystery novels and spend countless evenings unraveling their plots, but I adore reading poetry",
+    "s_pos": "As a fervent reader, my passion lies in the twists and turns of mystery stories, which I often explore during long nights, yet I cherish reading poetry",
+    "s_neg": "Contrary to my usual tastes, I rarely delve into mystery novels and prefer lighter reading materials, but I adore reading poetry",
+    "struct": "S1",
+    "sim_pos": "0.9777",
+    "sim_neg": "0.9757",
+    "correct": true
+  },
+  {
+    "q": "Growing up in a bustling city, I’ve always been surrounded by the constant hum of activity and the bright city lights, which makes me appreciate quiet countryside walks",
+    "s_pos": "Raised in the lively atmosphere of an urban environment, I’m used to the never-ending city noise and glowing nights, leading me to enjoy the serenity of rural strolls",
+    "s_neg": "Having been raised in a tranquil rural area, I’m more accustomed to the sounds of nature and open fields, which makes me appreciate quiet countryside walks",
+    "struct": "S1",
+    "sim_pos": "0.9811",
+    "sim_neg": "0.9860",
+    "correct": false
+  },
+  {
+    "q": "Ever since I was a child, fascinated by the vastness of the universe, I would spend countless nights gazing at the stars through my telescope, dreaming of exploring distant galaxies, yet I still find solace in simple nature hikes",
+    "s_pos": "From my early years, captivated by the infinity of space, I devoted many nights to stargazing and imagining interstellar journeys, but I also enjoy the peace of nature walks",
+    "s_neg": "Though I’ve always been more interested in the immediate world around me, preferring to focus on the tangible and the present, I rarely look up at the night sky, yet I still find solace in simple nature hikes",
+    "struct": "S1",
+    "sim_pos": "0.9727",
+    "sim_neg": "0.9747",
+    "correct": false
+  },
+  {
+    "q": "Growing up with a passion for culinary arts, experimenting with exotic ingredients and complex recipes, and often spending whole days in the kitchen perfecting new dishes, I also have a deep appreciation for classic literature",
+    "s_pos": "Since childhood, I’ve been enthusiastic about cooking, often trying out unusual ingredients and intricate recipes, dedicating entire days to refining my culinary creations, and I equally cherish classic literary works",
+    "s_neg": "Despite my lack of interest in cooking and a preference for simple, quick meals that require minimal preparation, I’m not one to spend time in the kitchen, I also have a deep appreciation for classic literature",
+    "struct": "S1",
+    "sim_pos": "0.9785",
+    "sim_neg": "0.9760",
+    "correct": true
+  }
+]
