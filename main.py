@@ -18,7 +18,7 @@ evaluation = mteb.MTEB(tasks=tasks)
 evaluation.run(
     model,
     encode_kwargs={
-        "batch_size": 64,
+        "batch_size": 48,
         "show_progress_bar": True,
     },
     output_folder="mteb_results/echo_mistral",
