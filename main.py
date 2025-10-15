@@ -12,7 +12,7 @@ model = EchoModel(
     "mistralai/Mistral-7B-Instruct-v0.1", templates, pooling_strategy="mean"
 )
 
-tasks = mteb.get_tasks(tasks=by_type["Classification"][:6])
+tasks = mteb.get_tasks(tasks=["FEVER"])
 
 evaluation = mteb.MTEB(tasks=tasks)
 evaluation.run(
