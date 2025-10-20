@@ -428,7 +428,7 @@ class EchoModel:
         self,
         path_to_model: str,
         templates: Dict[str, str],
-        max_length: int = 300,
+        max_length: int = 3072,
         pooling_strategy: str = "mean",
         pad_to_multiple_of: Optional[int] = 8,
         dtype: Optional[torch.dtype] = None,
