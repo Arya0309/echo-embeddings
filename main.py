@@ -8,6 +8,18 @@ logging.basicConfig(
     force=True,  # Py3.8+，確保真的套用
 )
 
+import random
+import numpy as np
+import torch
+
+# 設定全域隨機種子
+seed = 42
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(seed)
+
 # main.py
 import mteb
 from echo_for_mteb import EchoModel
@@ -19,7 +31,9 @@ def run(templates, output_folder, tasks_list=None):
         "mistralai/Mistral-7B-Instruct-v0.1", templates, pooling_strategy="mean"
     )
 
-    tasks = mteb.get_tasks(tasks=tasks_list, languages=["eng"])
+    tasks = mteb.get_tasks(
+        tasks=tasks_list, languages=["eng"], exclusive_language_filter=True
+    )
 
     evaluation = mteb.MTEB(tasks=tasks)
     evaluation.run(
@@ -55,6 +69,6 @@ templates_classical = {
 
 
 if __name__ == "__main__":
-    tasks_list = ["STS22"]
+    tasks_list = by_type["STS"]
     run(templates_echo, "mteb_results/echo_mistral/STS", tasks_list=tasks_list)
     # run(templates_classical, "mteb_results/mistral/STS", tasks_list=tasks_list)

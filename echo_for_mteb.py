@@ -196,7 +196,7 @@ class EchoParser(nn.Module):
         def pad1d(x: torch.Tensor, pad_id: int, length: int) -> torch.Tensor:
             L = x.shape[0]
             if L >= length:
-                return x[:length]
+                return x[-length:]
             out = x.new_full((length,), pad_id)
             out[:L] = x
             return out
@@ -428,7 +428,7 @@ class EchoModel:
         self,
         path_to_model: str,
         templates: Dict[str, str],
-        max_length: int = 3072,
+        max_length: int = 512,
         pooling_strategy: str = "mean",
         pad_to_multiple_of: Optional[int] = 8,
         dtype: Optional[torch.dtype] = None,
