@@ -141,7 +141,7 @@ class EchoParser(nn.Module):
         # 這裡不要再用 max_length=256 以免吃掉指令字；全局 600 由 tokenize() 把關
         tok = self.tokenizer(
             filled,
-            truncation=False,          # 這裡不截；最後由 batch 的 max_length 截
+            truncation=False,  # 這裡不截；最後由 batch 的 max_length 截
             padding=False,
             add_special_tokens=False,  # 動態片段通常不在這裡加 special tokens
         )
@@ -151,7 +151,11 @@ class EchoParser(nn.Module):
         return {
             "input_ids": input_ids,
             "attention_mask": torch.ones(L, dtype=torch.long),
-            "embed_mask": torch.zeros(L, dtype=torch.long) if non_pool else torch.ones(L, dtype=torch.long),
+            "embed_mask": (
+                torch.zeros(L, dtype=torch.long)
+                if non_pool
+                else torch.ones(L, dtype=torch.long)
+            ),
         }
 
     def _tokenize_static_piece(self, ids: List[int]) -> Dict[str, torch.Tensor]:
@@ -316,6 +320,7 @@ class EchoBatchedConfig:
     templates: Optional[Dict[str, str]] = None
     pooling: str = "mean"
     max_length: Optional[int] = 600
+    piece_max_tokens: int = 256
     pad_to_multiple_of: Optional[int] = 8
     dtype: Optional[torch.dtype] = None  # e.g., torch.bfloat16/float16
     device: Optional[str] = None  # 'cuda'|'cpu'|None -> auto
@@ -334,6 +339,7 @@ class EchoBatched:
                 "query": "{!Rewrite the following sentence: %%x%%}\n{The rewritten sentence: %%x%%}"
             },
             max_length=cfg.max_length,
+            piece_max_tokens=cfg.piece_max_tokens,
             pad_to_multiple_of=cfg.pad_to_multiple_of,
         )
 
@@ -449,6 +455,7 @@ class EchoModel:
         path_to_model: str,
         templates: Dict[str, str],
         max_length: int = 600,
+        piece_max_tokens: int = 256,
         pooling_strategy: str = "mean",
         pad_to_multiple_of: Optional[int] = 8,
         dtype: Optional[torch.dtype] = None,
@@ -459,6 +466,7 @@ class EchoModel:
             templates=templates,
             pooling=pooling_strategy,
             max_length=max_length,
+            piece_max_tokens=piece_max_tokens,
             pad_to_multiple_of=pad_to_multiple_of,
             dtype=dtype,
         )

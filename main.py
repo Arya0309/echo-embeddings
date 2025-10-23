@@ -28,7 +28,11 @@ from listing_mteb import by_type
 
 def run(templates, output_folder, tasks_list=None):
     model = EchoModel(
-        "mistralai/Mistral-7B-Instruct-v0.1", templates, pooling_strategy="mean"
+        "mistralai/Mistral-7B-Instruct-v0.1",
+        templates,
+        pooling_strategy="mean",
+        piece_max_tokens=256,
+        max_length=550,
     )
 
     tasks = mteb.get_tasks(
@@ -39,7 +43,7 @@ def run(templates, output_folder, tasks_list=None):
     evaluation.run(
         model,
         encode_kwargs={
-            "batch_size": 2048,
+            "batch_size": 32,
             "show_progress_bar": True,
         },
         output_folder=output_folder,
