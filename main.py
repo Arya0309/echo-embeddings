@@ -39,7 +39,7 @@ def run(templates, output_folder, tasks_list=None):
     evaluation.run(
         model,
         encode_kwargs={
-            "batch_size": 16,
+            "batch_size": 2048,
             "show_progress_bar": True,
         },
         output_folder=output_folder,

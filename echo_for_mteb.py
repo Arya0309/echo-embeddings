@@ -43,11 +43,13 @@ class EchoParser(nn.Module):
         self,
         tokenizer: Union[str, Any],
         templates: Dict[str, str],
-        max_length: Optional[int] = None,
+        max_length: Optional[int] = 600,
+        piece_max_tokens: Optional[int] = 256,
         pad_to_multiple_of: Optional[int] = 8,
     ) -> None:
         super().__init__()
         self.max_length = max_length
+        self.piece_max_tokens = piece_max_tokens
         self.pad_to_multiple_of = pad_to_multiple_of
 
         self.tokenizer = tokenizer
@@ -70,6 +72,7 @@ class EchoParser(nn.Module):
         self.template_pieces: Dict[str, List[Union[str, List[int]]]] = {
             k: self._parse_template(v) for k, v in templates.items()
         }
+        self.piece_max_tokens = piece_max_tokens
 
     # --- template parsing ---
     def _parse_template(self, template: str) -> List[Union[str, List[int]]]:
@@ -103,35 +106,52 @@ class EchoParser(nn.Module):
                     pieces.append(ids)  # static piece -> already tokenized
         return pieces
 
-    def _tokenize_dynamic_piece(
-        self, sample: Dict[str, str], piece: str
-    ) -> Dict[str, torch.Tensor]:
-        # leading '!' disables pooling for this piece
-        embed_on = 1
-        if piece.startswith("!"):
-            piece = piece[1:]
-            embed_on = 0
+    # 2) 工具函式：用 tokenizer 依 token 數截斷一段文字
+    def _clamp_by_tokens(self, text: str, max_tokens: int) -> str:
+        # 只截斷內容本身，不要讓 tokenizer 自動加 special tokens
+        ids = self.tokenizer.encode(text, add_special_tokens=False)
+        if len(ids) <= max_tokens:
+            return text
+        ids = ids[:max_tokens]
+        # 用 decode 還原；避免清理格式導致多餘變動
+        return self.tokenizer.decode(
+            ids,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
+        )
 
-        # replace %%key%% with sample[key]
-        def repl(m: re.Match) -> str:
+    # 3) 在 _tokenize_dynamic_piece 裡，替換 %%key%% 前先對 sample[key] 做截斷
+    def _tokenize_dynamic_piece(self, sample: dict, piece_spec: str):
+        # piece_spec 是花括號內的原字串；可能以 '!' 開頭表示 non-pooling
+        non_pool = piece_spec.startswith("!")
+        inner = piece_spec[1:] if non_pool else piece_spec
+
+        # 先把 %%key%% 各自 clamp 成 <= 256 tokens，再替換
+        cache = {}
+
+        def repl(m):
             key = m.group(1)
-            if key not in sample:
-                raise KeyError(
-                    f"Missing key '{key}' in sample for template substitution"
-                )
-            return str(sample[key])
+            raw = sample.get(key, "")
+            if key not in cache:
+                cache[key] = self._clamp_by_tokens(raw, self.piece_max_tokens)
+            return cache[key]
 
-        text = re.sub(r"%%(.*?)%%", repl, piece)
+        filled = re.sub(r"%%(.*?)%%", repl, inner)
 
-        # tokenize; clipping handled later by batch pad/truncate
-        toks = self.tokenizer(text, add_special_tokens=False)["input_ids"]
-        L = len(toks)
-        att = torch.ones(L, dtype=torch.long)
-        emb = torch.full((L,), embed_on, dtype=torch.long)
+        # 這裡不要再用 max_length=256 以免吃掉指令字；全局 600 由 tokenize() 把關
+        tok = self.tokenizer(
+            filled,
+            truncation=False,          # 這裡不截；最後由 batch 的 max_length 截
+            padding=False,
+            add_special_tokens=False,  # 動態片段通常不在這裡加 special tokens
+        )
+
+        input_ids = torch.tensor(tok["input_ids"], dtype=torch.long)
+        L = input_ids.shape[0]
         return {
-            "input_ids": torch.tensor(toks, dtype=torch.long),
-            "attention_mask": att,
-            "embed_mask": emb,
+            "input_ids": input_ids,
+            "attention_mask": torch.ones(L, dtype=torch.long),
+            "embed_mask": torch.zeros(L, dtype=torch.long) if non_pool else torch.ones(L, dtype=torch.long),
         }
 
     def _tokenize_static_piece(self, ids: List[int]) -> Dict[str, torch.Tensor]:
@@ -196,7 +216,7 @@ class EchoParser(nn.Module):
         def pad1d(x: torch.Tensor, pad_id: int, length: int) -> torch.Tensor:
             L = x.shape[0]
             if L >= length:
-                return x[-length:]
+                return x[:length]
             out = x.new_full((length,), pad_id)
             out[:L] = x
             return out
@@ -295,7 +315,7 @@ class EchoBatchedConfig:
     tokenizer: Optional[str] = None
     templates: Optional[Dict[str, str]] = None
     pooling: str = "mean"
-    max_length: Optional[int] = 512
+    max_length: Optional[int] = 600
     pad_to_multiple_of: Optional[int] = 8
     dtype: Optional[torch.dtype] = None  # e.g., torch.bfloat16/float16
     device: Optional[str] = None  # 'cuda'|'cpu'|None -> auto
@@ -428,7 +448,7 @@ class EchoModel:
         self,
         path_to_model: str,
         templates: Dict[str, str],
-        max_length: int = 512,
+        max_length: int = 600,
         pooling_strategy: str = "mean",
         pad_to_multiple_of: Optional[int] = 8,
         dtype: Optional[torch.dtype] = None,
