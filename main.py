@@ -31,8 +31,8 @@ def run(templates, output_folder, tasks_list=None):
         "mistralai/Mistral-7B-Instruct-v0.1",
         templates,
         pooling_strategy="mean",
-        piece_max_tokens=256,
-        max_length=550,
+        piece_max_tokens=128,
+        max_length=300,
     )
 
     tasks = mteb.get_tasks(
@@ -43,7 +43,7 @@ def run(templates, output_folder, tasks_list=None):
     evaluation.run(
         model,
         encode_kwargs={
-            "batch_size": 32,
+            "batch_size": 256,
             "show_progress_bar": True,
         },
         output_folder=output_folder,
@@ -73,6 +73,6 @@ templates_classical = {
 
 
 if __name__ == "__main__":
-    tasks_list = by_type["STS"]
-    run(templates_echo, "mteb_results/echo_mistral/STS", tasks_list=tasks_list)
-    # run(templates_classical, "mteb_results/mistral/STS", tasks_list=tasks_list)
+    tasks_list = by_type["Reranking"] + by_type["STS"] + by_type["Clustering"] + by_type["PairClassification"] + by_type["Summarization"]
+    run(templates_echo, "mteb_results/echo_mistral_compute_matched", tasks_list=tasks_list)
+    # run(templates_classical, "mteb_results/mistral", tasks_list=tasks_list)

@@ -1,0 +1,6 @@
+task,main_score
+Clustering,0.3349197272727273
+PairClassification,0.7217943333333333
+Reranking,0.473286
+STS,0.7339387
+Summarization,0.293632
