@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
@@ -35,7 +36,7 @@ class EchoParser(nn.Module):
       - If a dynamic piece string starts with '!', that piece is marked as non-pooling (embed_mask=0).
       - Any text outside `{ ... }` is considered a static piece and NEVER participates in pooling (embed_mask=0).
     Example:
-      "<s>{!Q: %%x%%}\\n{A: %%x%%}</s>"
+      "<s>{!Q: %%x%%}\n{A: %%x%%}</s>"
       -> first piece non-pooling; second piece pooling.
     """
 
@@ -73,6 +74,19 @@ class EchoParser(nn.Module):
             k: self._parse_template(v) for k, v in templates.items()
         }
         self.piece_max_tokens = piece_max_tokens
+
+        # ---- Length stats (off by default) ----
+        self._collect_len_stats = False
+        self._row_stats: List[Dict[str, int]] = []
+
+    # ---- controls for length stats ----
+    def enable_length_stats(self, flag: bool = True):
+        self._collect_len_stats = flag
+
+    def pop_length_stats(self) -> List[Dict[str, int]]:
+        out = self._row_stats
+        self._row_stats = []
+        return out
 
     # --- template parsing ---
     def _parse_template(self, template: str) -> List[Union[str, List[int]]]:
@@ -120,35 +134,49 @@ class EchoParser(nn.Module):
             clean_up_tokenization_spaces=False,
         )
 
-    # 3) 在 _tokenize_dynamic_piece 裡，替換 %%key%% 前先對 sample[key] 做截斷
+    # 3) 在 _tokenize_dynamic_piece 裡，替換 %%key%% 前先對 sample[key] 做側錄
     def _tokenize_dynamic_piece(self, sample: dict, piece_spec: str):
         # piece_spec 是花括號內的原字串；可能以 '!' 開頭表示 non-pooling
         non_pool = piece_spec.startswith("!")
         inner = piece_spec[1:] if non_pool else piece_spec
 
-        # 先把 %%key%% 各自 clamp 成 <= 256 tokens，再替換
         cache = {}
 
         def repl(m):
             key = m.group(1)
             raw = sample.get(key, "")
             if key not in cache:
-                cache[key] = self._clamp_by_tokens(raw, self.piece_max_tokens)
+                cache[key] = raw  # 先不 clamp，稍後統一計算 raw_len
             return cache[key]
 
-        filled = re.sub(r"%%(.*?)%%", repl, inner)
+        filled_raw = re.sub(r"%%(.*?)%%", repl, inner)
 
-        # 這裡不要再用 max_length=256 以免吃掉指令字；全局 600 由 tokenize() 把關
-        tok = self.tokenizer(
-            filled,
-            truncation=False,  # 這裡不截；最後由 batch 的 max_length 截
-            padding=False,
-            add_special_tokens=False,  # 動態片段通常不在這裡加 special tokens
+        # ---- 先計算「未截斷」的 raw_len ----
+        tok_raw = self.tokenizer(
+            filled_raw, truncation=False, padding=False, add_special_tokens=False
         )
+        raw_ids = tok_raw["input_ids"]
+        raw_len = len(raw_ids)
 
-        input_ids = torch.tensor(tok["input_ids"], dtype=torch.long)
+        # ---- 再做 piece 級別的 clamp，得到 post_clamp_len ----
+        if self.piece_max_tokens is not None and raw_len > self.piece_max_tokens:
+            # 保留前段
+            # clamped_ids = raw_ids[: self.piece_max_tokens]
+            # 保留後段
+            clamped_ids = raw_ids[self.piece_max_tokens * -1 :]
+            # 保留中間
+            # clamped_ids = raw_ids[
+            #     (raw_len - self.piece_max_tokens)
+            #     // 2 : (raw_len + self.piece_max_tokens)
+            #     // 2
+            # ]
+        else:
+            clamped_ids = raw_ids
+        post_len = len(clamped_ids)
+
+        input_ids = torch.tensor(clamped_ids, dtype=torch.long)
         L = input_ids.shape[0]
-        return {
+        out: Dict[str, Union[torch.Tensor, int]] = {
             "input_ids": input_ids,
             "attention_mask": torch.ones(L, dtype=torch.long),
             "embed_mask": (
@@ -156,7 +184,10 @@ class EchoParser(nn.Module):
                 if non_pool
                 else torch.ones(L, dtype=torch.long)
             ),
+            "_raw_len": raw_len,
+            "_post_len": post_len,
         }
+        return out
 
     def _tokenize_static_piece(self, ids: List[int]) -> Dict[str, torch.Tensor]:
         L = len(ids)
@@ -164,31 +195,46 @@ class EchoParser(nn.Module):
             "input_ids": torch.tensor(ids, dtype=torch.long),
             "attention_mask": torch.ones(L, dtype=torch.long),
             "embed_mask": torch.zeros(L, dtype=torch.long),  # static -> never pooled
+            "_raw_len": L,
+            "_post_len": L,
         }
 
     def _tokenize_from_pieces(
         self, sample: Dict[str, str], pieces: List[Union[str, List[int]]]
     ) -> Dict[str, torch.Tensor]:
-        outs = []
+        outs: List[Dict[str, Union[torch.Tensor, int]]] = []
+        raw_total = 0
+        post_total = 0
         for p in pieces:
             if isinstance(p, str):
-                outs.append(self._tokenize_dynamic_piece(sample, p))
+                o = self._tokenize_dynamic_piece(sample, p)
             else:
-                outs.append(self._tokenize_static_piece(p))
+                o = self._tokenize_static_piece(p)
+            outs.append(o)  # type: ignore[arg-type]
+            raw_total += int(o.get("_raw_len", 0))  # type: ignore[union-attr]
+            post_total += int(o.get("_post_len", 0))  # type: ignore[union-attr]
 
         # concat along sequence
         def cat(key: str) -> torch.Tensor:
             return (
-                torch.cat([o[key] for o in outs], dim=0)
+                torch.cat([o[key] for o in outs], dim=0)  # type: ignore[index]
                 if outs
                 else torch.empty(0, dtype=torch.long)
             )
 
-        return {
+        batch_row: Dict[str, torch.Tensor] = {
             "input_ids": cat("input_ids"),
             "attention_mask": cat("attention_mask"),
             "embed_mask": cat("embed_mask"),
         }
+
+        if self._collect_len_stats:
+            # final_len 之後在 batching 截斷/補齊後計算
+            self._row_stats.append(
+                {"pre_clamp_len": raw_total, "post_clamp_len": post_total}
+            )
+
+        return batch_row
 
     def tokenize(
         self,
@@ -369,6 +415,13 @@ class EchoBatched:
         except Exception:
             pass
 
+        # ---- length stats accumulators ----
+        self._len_acc_pre: List[int] = []
+        self._len_acc_post: List[int] = []
+        self._len_acc_final: List[int] = []
+
+        self.parser.enable_length_stats(True)
+
     def _template_key(self, prompt_type: Optional[PromptType]) -> str:
         if prompt_type == PromptType.query and "query" in self.parser.templates:
             return "query"
@@ -408,8 +461,18 @@ class EchoBatched:
             pairs = [(key, t) for t in texts[i : i + batch_size]]
             tokens = self.parser(pairs)
 
-            # move to device for the forward pass only (embed_mask can stay on CPU; but we move it after forward to pool on device and then bring back)
+            # --- collect pre/post clamp lengths from parser (per-row) ---
+            for s in self.parser.pop_length_stats():
+                self._len_acc_pre.append(int(s["pre_clamp_len"]))
+                self._len_acc_post.append(int(s["post_clamp_len"]))
+
+            # move to device for the forward pass only
             tokens = {k: v.to(self.device) for k, v in tokens.items()}
+
+            # final length after batching (truncate/pad)
+            self._len_acc_final.extend(
+                tokens["attention_mask"].sum(dim=1).cpu().tolist()
+            )
 
             # autocast
             if self.device.type == "cuda":
@@ -436,6 +499,26 @@ class EchoBatched:
 
             emb = xs["sentence_embedding"].detach().float().cpu().numpy()
             out_chunks.append(emb)
+
+        def _summ(name: str, arr_list: List[int]) -> str:
+            arr = np.asarray(arr_list, dtype=np.int64)
+            if arr.size == 0:
+                return f"{name}: n=0"
+            p50, p90, p95, p99 = np.percentile(arr, [50, 90, 95, 99]).tolist()
+            return (
+                f"{name}: n={arr.size} mean={arr.mean():.1f} "
+                f"median={p50:.0f} p90={p90:.0f} p95={p95:.0f} p99={p99:.0f} "
+                f">128={(arr>128).mean()*100:.1f}% >256={(arr>256).mean()*100:.1f}% >512={(arr>512).mean()*100:.1f}%"
+            )
+
+        print("[LEN] ", _summ("pre_clamp", self._len_acc_pre))
+        print("[LEN] ", _summ("post_clamp", self._len_acc_post))
+        print("[LEN] ", _summ("final", self._len_acc_final))
+
+        # Clear accumulators for the next task
+        self._len_acc_pre.clear()
+        self._len_acc_post.clear()
+        self._len_acc_final.clear()
 
         return np.vstack(out_chunks)
 

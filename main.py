@@ -26,13 +26,20 @@ from echo_for_mteb import EchoModel
 from listing_mteb import by_type
 
 
-def run(templates, output_folder, tasks_list=None):
+def run(
+    templates,
+    output_folder,
+    tasks_list=None,
+    piece_max_tokens=256,
+    max_length=600,
+    batch_size=32,
+):
     model = EchoModel(
         "mistralai/Mistral-7B-Instruct-v0.1",
         templates,
         pooling_strategy="mean",
-        piece_max_tokens=128,
-        max_length=300,
+        piece_max_tokens=piece_max_tokens,
+        max_length=max_length,
     )
 
     tasks = mteb.get_tasks(
@@ -43,11 +50,11 @@ def run(templates, output_folder, tasks_list=None):
     evaluation.run(
         model,
         encode_kwargs={
-            "batch_size": 256,
+            "batch_size": batch_size,
             "show_progress_bar": True,
         },
         output_folder=output_folder,
-        verbosity=2,
+        verbosity=1,
     )
 
 
@@ -73,6 +80,37 @@ templates_classical = {
 
 
 if __name__ == "__main__":
-    tasks_list = by_type["Reranking"] + by_type["STS"] + by_type["Clustering"] + by_type["PairClassification"] + by_type["Summarization"]
-    run(templates_echo, "mteb_results/echo_mistral_compute_matched", tasks_list=tasks_list)
+    tasks_list = (
+        by_type["Reranking"]
+        + by_type["STS"]
+        + by_type["Clustering"]
+        + by_type["PairClassification"]
+        + by_type["Summarization"]
+        + "ArguAna"
+    )
+
+    run(
+        templates_echo,
+        "mteb_results/echo_mistral/ALL/mid_clamp_256",
+        tasks_list=tasks_list,
+        piece_max_tokens=256,
+        max_length=600,
+        batch_size=32,
+    )
+    # run(
+    #     templates_echo,
+    #     "mteb_results/echo_mistral/ALL/mid_clamp_128",
+    #     tasks_list=tasks_list,
+    #     piece_max_tokens=128,
+    #     max_length=300,
+    #     batch_size=32,
+    # )
+    # run(
+    #     templates_echo,
+    #     "mteb_results/echo_mistral/ALL/mid_clamp",
+    #     tasks_list=tasks_list,
+    #     piece_max_tokens=512,
+    #     max_length=1100,
+    #     batch_size=16,
+    # )
     # run(templates_classical, "mteb_results/mistral", tasks_list=tasks_list)

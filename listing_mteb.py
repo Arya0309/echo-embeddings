@@ -25,13 +25,13 @@ for t in evaluator.tasks:
 
 
 if __name__ == "__main__":
-    # total = 0
-    # for k in sorted(by_type):
-    #     items = sorted(set(by_type[k]))
-    #     total += len(items)
-    #     print(f"\n=== {k} ({len(items)}) ===")
-    #     for s in items:
-    #         print(s)
-    # print(f"\nTotal datasets in benchmark: {total}")
+    total = 0
+    for k in sorted(by_type):
+        items = sorted(set(by_type[k]))
+        total += len(items)
+        print(f"\n=== {k} ({len(items)}) ===")
+        for s in items:
+            print(s)
+    print(f"\nTotal datasets in benchmark: {total}")
 
-    print(by_type.get("Classification"))  # Example usage
+    # print(by_type.get("Classification"))  # Example usage
