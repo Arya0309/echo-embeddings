@@ -161,9 +161,9 @@ class EchoParser(nn.Module):
         # ---- 再做 piece 級別的 clamp，得到 post_clamp_len ----
         if self.piece_max_tokens is not None and raw_len > self.piece_max_tokens:
             # 保留前段
-            # clamped_ids = raw_ids[: self.piece_max_tokens]
+            clamped_ids = raw_ids[: self.piece_max_tokens]
             # 保留後段
-            clamped_ids = raw_ids[self.piece_max_tokens * -1 :]
+            # clamped_ids = raw_ids[self.piece_max_tokens * -1 :]
             # 保留中間
             # clamped_ids = raw_ids[
             #     (raw_len - self.piece_max_tokens)

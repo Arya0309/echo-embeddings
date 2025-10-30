@@ -54,7 +54,7 @@ def run(
             "show_progress_bar": True,
         },
         output_folder=output_folder,
-        verbosity=1,
+        verbosity=2,
     )
 
 
@@ -80,23 +80,23 @@ templates_classical = {
 
 
 if __name__ == "__main__":
-    tasks_list = (
-        by_type["Reranking"]
-        + by_type["STS"]
-        + by_type["Clustering"]
-        + by_type["PairClassification"]
-        + by_type["Summarization"]
-        + "ArguAna"
-    )
+    # tasks_list = (
+    #     by_type["Reranking"]
+    #     + by_type["STS"]
+    #     + by_type["Clustering"]
+    #     + by_type["PairClassification"]
+    #     + by_type["Summarization"]
+    #     + ["ArguAna"]
+    # )
 
-    run(
-        templates_echo,
-        "mteb_results/echo_mistral/ALL/mid_clamp_256",
-        tasks_list=tasks_list,
-        piece_max_tokens=256,
-        max_length=600,
-        batch_size=32,
-    )
+    # run(
+    #     templates_echo,
+    #     "mteb_results/echo_mistral/ALL/mid_clamp_256",
+    #     tasks_list=tasks_list,
+    #     piece_max_tokens=256,
+    #     max_length=600,
+    #     batch_size=32,
+    # )
     # run(
     #     templates_echo,
     #     "mteb_results/echo_mistral/ALL/mid_clamp_128",
@@ -111,6 +111,15 @@ if __name__ == "__main__":
     #     tasks_list=tasks_list,
     #     piece_max_tokens=512,
     #     max_length=1100,
-    #     batch_size=16,
+    #     batch_size=32,
     # )
-    # run(templates_classical, "mteb_results/mistral", tasks_list=tasks_list)
+
+    tasks_list = by_type["Summarization"]
+    run(
+        templates_echo,
+        "mteb_results/echo_mistral/SummEval/247",
+        tasks_list=tasks_list,
+        piece_max_tokens=247,
+        max_length=512,
+        batch_size=32,
+    )
