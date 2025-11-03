@@ -89,37 +89,13 @@ if __name__ == "__main__":
     #     + ["ArguAna"]
     # )
 
-    # run(
-    #     templates_echo,
-    #     "mteb_results/echo_mistral/ALL/mid_clamp_256",
-    #     tasks_list=tasks_list,
-    #     piece_max_tokens=256,
-    #     max_length=600,
-    #     batch_size=32,
-    # )
-    # run(
-    #     templates_echo,
-    #     "mteb_results/echo_mistral/ALL/mid_clamp_128",
-    #     tasks_list=tasks_list,
-    #     piece_max_tokens=128,
-    #     max_length=300,
-    #     batch_size=32,
-    # )
-    # run(
-    #     templates_echo,
-    #     "mteb_results/echo_mistral/ALL/mid_clamp",
-    #     tasks_list=tasks_list,
-    #     piece_max_tokens=512,
-    #     max_length=1100,
-    #     batch_size=32,
-    # )
+    tasks_list = ["STS22"]
 
-    tasks_list = by_type["Summarization"]
     run(
-        templates_echo,
-        "mteb_results/echo_mistral/SummEval/247",
+        templates=templates_echo,
+        output_folder="mteb_results/echo_mistral/stanza_1.0",
         tasks_list=tasks_list,
-        piece_max_tokens=247,
-        max_length=512,
+        piece_max_tokens=256,
+        max_length=256 * 2 + 18,
         batch_size=32,
     )

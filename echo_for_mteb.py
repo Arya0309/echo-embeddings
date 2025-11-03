@@ -3,13 +3,21 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union, Literal
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoModel, AutoTokenizer
+
+
+# Helper: validate clamping strategy
+def _validate_clamp_strategy(name: str) -> str:
+    allowed = {'head', 'tail', 'middle'}
+    if name not in allowed:
+        raise ValueError(f"piece_clamp_strategy must be one of {sorted(allowed)}, got: {name}")
+    return name
 
 # Optional: only used if the environment provides it (MTEB)
 try:
@@ -47,11 +55,13 @@ class EchoParser(nn.Module):
         max_length: Optional[int] = 600,
         piece_max_tokens: Optional[int] = 256,
         pad_to_multiple_of: Optional[int] = 8,
+        piece_clamp_strategy: Literal['head','tail','middle'] = "head",  # 'head'|'tail'|'middle'
     ) -> None:
         super().__init__()
         self.max_length = max_length
         self.piece_max_tokens = piece_max_tokens
         self.pad_to_multiple_of = pad_to_multiple_of
+        self.piece_clamp_strategy = piece_clamp_strategy
 
         self.tokenizer = tokenizer
         if isinstance(self.tokenizer, str):
@@ -160,18 +170,23 @@ class EchoParser(nn.Module):
 
         # ---- 再做 piece 級別的 clamp，得到 post_clamp_len ----
         if self.piece_max_tokens is not None and raw_len > self.piece_max_tokens:
-            # 保留前段
-            clamped_ids = raw_ids[: self.piece_max_tokens]
-            # 保留後段
-            # clamped_ids = raw_ids[self.piece_max_tokens * -1 :]
-            # 保留中間
-            # clamped_ids = raw_ids[
-            #     (raw_len - self.piece_max_tokens)
-            #     // 2 : (raw_len + self.piece_max_tokens)
-            #     // 2
-            # ]
+            # 依策略取段落
+            if self.piece_clamp_strategy == "head":
+                clamped_ids = raw_ids[: self.piece_max_tokens]
+            elif self.piece_clamp_strategy == "tail":
+                clamped_ids = raw_ids[-self.piece_max_tokens :]
+            elif self.piece_clamp_strategy == "middle":
+                start = max(0, (raw_len - self.piece_max_tokens) // 2)
+                clamped_ids = raw_ids[start : start + self.piece_max_tokens]
+            else:
+                clamped_ids = raw_ids[: self.piece_max_tokens]
+
+            # compute match
+            # clamped_ids = clamped_ids[: len(clamped_ids) // 2]
+
         else:
             clamped_ids = raw_ids
+
         post_len = len(clamped_ids)
 
         input_ids = torch.tensor(clamped_ids, dtype=torch.long)
@@ -312,6 +327,9 @@ class EchoPooling(nn.Module):
         """
         emb = xs["token_embeddings"]
         mask = xs["embed_mask"].to(dtype=emb.dtype)  # (B, L)
+        if "weights" in xs:
+            w = xs["weights"].to(dtype=emb.dtype)
+            mask = mask * w
 
         if self.strategy == "mean":
             num = torch.einsum("blh,bl->bh", emb, mask)  # sum over positions
@@ -359,6 +377,119 @@ class EchoEmbeddingsModel(nn.Module):
 # -----------------------
 # High-level: EchoBatched
 # -----------------------
+
+
+# === Stanza-based weighting helpers ===
+def _lazy_load_stanza(
+    lang: str = "en", processors: str = "tokenize,pos,lemma,depparse,ner"
+):
+    import stanza
+
+    try:
+        nlp = stanza.Pipeline(lang, processors=processors, tokenize_no_ssplit=True)
+    except Exception:
+        stanza.download(lang)
+        nlp = stanza.Pipeline(lang, processors=processors, tokenize_no_ssplit=True)
+    return nlp
+
+
+_POS_W = {"VERB": 3, "NOUN": 3, "PROPN": 3, "ADJ": 2, "ADV": 2, "NUM": 2}
+_DEP_W = {
+    "root": 4,
+    "xcomp": 3,
+    "ccomp": 3,
+    "advcl": 2,
+    "nsubj": 3,
+    "obj": 3,
+    "iobj": 2,
+    "obl": 2,
+    "amod": 2,
+    "advmod": 2,
+    "nummod": 2,
+    "compound": 1,
+    "appos": 1,
+    "conj": 2,
+    "neg": 4,
+}
+_LOW_INFO_DEPS = {"case", "mark", "cc", "punct"}
+
+
+def _tok_score(upos: str, deprel: str) -> int:
+    pos_w = _POS_W.get(upos, 0)
+    dep_w = _DEP_W.get(deprel, 0)
+    if deprel in _LOW_INFO_DEPS:
+        dep_w = 0
+    return pos_w + dep_w
+
+
+def _stanza_word_spans_with_scores(nlp, text: str):
+    if not text.strip():
+        return []
+    doc = nlp(text)
+    if not doc.sentences:
+        return []
+    spans_scores = []
+    for w in doc.sentences[0].words:
+        if w.start_char is None or w.end_char is None:
+            continue
+        spans_scores.append(
+            (
+                (int(w.start_char), int(w.end_char)),
+                _tok_score(w.upos or "_", w.deprel or "_"),
+            )
+        )
+    return spans_scores
+
+
+def _decide_keep_bits(
+    scores: List[int], keep_top_p: Optional[float], score_threshold: Optional[int]
+) -> List[int]:
+    if not scores:
+        return []
+    if keep_top_p is not None:
+        assert 0.0 < keep_top_p <= 1.0
+        sorted_scores = sorted(scores, reverse=True)
+        k = max(1, int(len(scores) * keep_top_p))
+        thresh = sorted_scores[k - 1]
+        return [1 if s >= thresh else 0 for s in scores]
+    if score_threshold is not None:
+        return [1 if s >= score_threshold else 0 for s in scores]
+    sorted_scores = sorted(scores, reverse=True)
+    k = max(1, int(len(scores) * 0.4))
+    thresh = sorted_scores[k - 1]
+    return [1 if s >= thresh else 0 for s in scores]
+
+
+def _build_subword_weights(
+    tokenizer,
+    text: str,
+    nlp,
+    keep_top_p: Optional[float],
+    score_threshold: Optional[int],
+) -> List[float]:
+    enc = tokenizer(text, return_offsets_mapping=True, add_special_tokens=False)
+    sw = enc.get("offset_mapping") or enc["offset_mapping"]
+    if nlp is None:
+        return [1.0] * len(sw)
+    spans_scores = _stanza_word_spans_with_scores(nlp, text)
+    if not spans_scores:
+        return [1.0] * len(sw)
+    spans, scores = zip(*spans_scores)
+    keep_bits = _decide_keep_bits(list(scores), keep_top_p, score_threshold)
+    out = []
+    for s_o, e_o in sw:
+        w = 0.0
+        for i, (ws, we) in enumerate(spans):
+            if not (e_o <= ws or we <= s_o):
+                if keep_bits[i] == 1:
+                    w = 1.0
+                    break
+        out.append(w)
+    if all(v == 0.0 for v in out) and len(out) > 0:
+        out[0] = 1.0
+    return out
+
+
 @dataclass
 class EchoBatchedConfig:
     base_model: str
@@ -367,15 +498,23 @@ class EchoBatchedConfig:
     pooling: str = "mean"
     max_length: Optional[int] = 600
     piece_max_tokens: int = 256
+    piece_clamp_strategy: Literal['head','tail','middle'] = "head"  # 'head'|'tail'|'middle'
     pad_to_multiple_of: Optional[int] = 8
     dtype: Optional[torch.dtype] = None  # e.g., torch.bfloat16/float16
     device: Optional[str] = None  # 'cuda'|'cpu'|None -> auto
     use_dataparallel: bool = True  # enable if multi-GPU available
 
+    # --- optional Stanza-based weighted pooling ---
+    stanza_filter: bool = False
+    stanza_lang: str = "en"
+    keep_top_p: Optional[float] = None
+    score_threshold: Optional[int] = None
+
 
 class EchoBatched:
     def __init__(self, cfg: EchoBatchedConfig) -> None:
         self.cfg = cfg
+        _validate_clamp_strategy(self.cfg.piece_clamp_strategy)
 
         tok_name = cfg.tokenizer or cfg.base_model
         self.parser = EchoParser(
@@ -387,6 +526,7 @@ class EchoBatched:
             max_length=cfg.max_length,
             piece_max_tokens=cfg.piece_max_tokens,
             pad_to_multiple_of=cfg.pad_to_multiple_of,
+            piece_clamp_strategy=cfg.piece_clamp_strategy,
         )
 
         self.model = EchoEmbeddingsModel.from_pretrained(cfg.base_model)
@@ -406,6 +546,14 @@ class EchoBatched:
 
         # dtype for autocast
         self.amp_dtype = cfg.dtype
+
+        # Optional Stanza-based weighted pooling
+        self._stanza = (
+            _lazy_load_stanza(cfg.stanza_lang)
+            if getattr(cfg, "stanza_filter", False)
+            else None
+        )
+        self._hf_tokenizer = self.parser.tokenizer
 
         # perf knobs
         torch.backends.cuda.matmul.allow_tf32 = True
@@ -495,6 +643,33 @@ class EchoBatched:
 
             # pooling needs embed_mask
             xs["embed_mask"] = tokens["embed_mask"]
+
+            # If enabled, build per-position weights only for pooled span
+            if self._stanza is not None:
+                B, L = xs["token_embeddings"].shape[:2]
+                weights = torch.zeros(
+                    (B, L), dtype=xs["token_embeddings"].dtype, device=self.device
+                )
+                # Map each example in this batch to subword weights computed from raw input text
+                for bi, (_, text) in enumerate(pairs):
+                    pooled_text = text  # in our templates {%%x%%} is the pooled piece
+                    sw = _build_subword_weights(
+                        self._hf_tokenizer,
+                        pooled_text,
+                        self._stanza,
+                        self.cfg.keep_top_p,
+                        self.cfg.score_threshold,
+                    )
+                    # Assign along the pooled span positions
+                    idx = xs["embed_mask"][bi] > 0
+                    pos = torch.nonzero(idx, as_tuple=False).flatten()
+                    n = min(len(sw), pos.numel())
+                    if n > 0:
+                        weights[bi, pos[:n]] = torch.tensor(
+                            sw[:n], dtype=weights.dtype, device=weights.device
+                        )
+                xs["weights"] = weights
+
             xs = self.pool(xs)
 
             emb = xs["sentence_embedding"].detach().float().cpu().numpy()
@@ -532,6 +707,9 @@ class EchoModel:
         model = EchoModel(path_to_model, templates, max_length=300, pooling_strategy="mean")
         embs = model.encode(texts, prompt_type=PromptType.query, batch_size=64)
     """
+    Args:
+        piece_clamp_strategy: One of 'head' (keep first N tokens per piece),
+            'tail' (keep last N per piece), or 'middle' (keep a centered window per piece).
 
     def __init__(
         self,
@@ -539,20 +717,32 @@ class EchoModel:
         templates: Dict[str, str],
         max_length: int = 600,
         piece_max_tokens: int = 256,
+        piece_clamp_strategy: Literal['head','tail','middle'] = "head",  # 'head'|'tail'|'middle'
         pooling_strategy: str = "mean",
         pad_to_multiple_of: Optional[int] = 8,
         dtype: Optional[torch.dtype] = None,
+        stanza_filter: bool = False,
+        stanza_lang: str = "en",
+        keep_top_p: Optional[float] = None,
+        score_threshold: Optional[int] = None,
     ) -> None:
         cfg = EchoBatchedConfig(
             base_model=path_to_model,
             tokenizer=path_to_model,
             templates=templates,
             pooling=pooling_strategy,
+            piece_clamp_strategy=_validate_clamp_strategy(piece_clamp_strategy),
             max_length=max_length,
             piece_max_tokens=piece_max_tokens,
+            piece_clamp_strategy=piece_clamp_strategy,
             pad_to_multiple_of=pad_to_multiple_of,
             dtype=dtype,
         )
+        # Stanza options
+        cfg.stanza_filter = stanza_filter
+        cfg.stanza_lang = stanza_lang
+        cfg.keep_top_p = keep_top_p
+        cfg.score_threshold = score_threshold
         self.engine = EchoBatched(cfg)
 
     def encode(

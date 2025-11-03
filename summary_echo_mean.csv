@@ -1,0 +1,4 @@
+mode,pool,model,stanza_filter,top_p,threshold,subset,accuracy,n
+echo,mean,mistralai/Mistral-7B-Instruct-v0.1,True,0.9,None,ALL,1.0000,17
+echo,mean,mistralai/Mistral-7B-Instruct-v0.1,True,0.9,None,S1,1.0000,6
+echo,mean,mistralai/Mistral-7B-Instruct-v0.1,True,0.9,None,S2,1.0000,11
